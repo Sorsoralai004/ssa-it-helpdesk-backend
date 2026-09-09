@@ -92,3 +92,5 @@ VALUES
   ('IT-1038', 'สุพจน์ มีชัย', 'ผลิต', 'ซอฟต์แวร์ / ระบบงาน', 'mid',
    'โปรแกรม ERP ค้างตอนบันทึกใบสั่งผลิต ต้องปิดโปรแกรมทุกครั้ง', 'new', now() - interval '3 days')
 ON CONFLICT (ticket_no) DO NOTHING;
+
+CREATE TABLE IF NOT EXISTS users (id SERIAL PRIMARY KEY, username VARCHAR(100) UNIQUE NOT NULL, password_hash TEXT NOT NULL, display_name VARCHAR(255), is_active BOOLEAN NOT NULL DEFAULT TRUE, created_at TIMESTAMPTZ NOT NULL DEFAULT now());

@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "db:init": "psql \"$DATABASE_URL\" -f schema.sql"
+    "db:init": "psql \"$DATABASE_URL\" -f schema.sql",
+    "user:create": "node scripts-create-user.js"
   },
   "dependencies": {
     "express": "^4.19.2",
@@ -15,6 +16,8 @@
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",
     "web-push": "^3.6.7",
-    "nodemailer": "^6.9.14"
+    "nodemailer": "^6.9.14",
+    "bcryptjs": "^2.4.3",
+    "jsonwebtoken": "^9.0.2"
   }
 }

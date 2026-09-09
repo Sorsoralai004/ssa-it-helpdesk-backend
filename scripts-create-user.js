@@ -1,0 +1,3 @@
+require('dotenv').config();
+const bcrypt=require('bcryptjs'); const {pool}=require('./src/db');
+(async()=>{const [username,password,displayName]=process.argv.slice(2);if(!username||!password){console.error('Usage: node scripts-create-user.js <username> <password> [displayName]');process.exit(1)}const hash=await bcrypt.hash(password,12);await pool.query('INSERT INTO users(username,password_hash,display_name) VALUES($1,$2,$3) ON CONFLICT(username) DO UPDATE SET password_hash=EXCLUDED.password_hash, display_name=EXCLUDED.display_name, is_active=TRUE',[username,hash,displayName||username]);console.log('IT user created/updated:',username);await pool.end()})().catch(e=>{console.error(e);process.exit(1)})
