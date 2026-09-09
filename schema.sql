@@ -38,6 +38,18 @@ CREATE TABLE IF NOT EXISTS ticket_status_history (
 
 CREATE INDEX IF NOT EXISTS idx_history_ticket ON ticket_status_history(ticket_id);
 
+-- Internal IT work notes. Multiple notes can be added to each ticket so the
+-- resolution steps and troubleshooting history are preserved.
+CREATE TABLE IF NOT EXISTS ticket_notes (
+  id           SERIAL PRIMARY KEY,
+  ticket_id    INTEGER NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  note         TEXT NOT NULL,
+  created_by   VARCHAR(255) NOT NULL,
+  created_at   TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX IF NOT EXISTS idx_ticket_notes_ticket ON ticket_notes(ticket_id, created_at);
+
 -- Auto-generate ticket_no on insert (IT-1043, IT-1044, ...)
 CREATE OR REPLACE FUNCTION set_ticket_no() RETURNS TRIGGER AS $$
 BEGIN

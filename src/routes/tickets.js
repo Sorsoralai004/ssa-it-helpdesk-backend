@@ -30,17 +30,28 @@ router.get('/', requireAuth, async (req, res) => {
   }
 });
 
-// GET /api/tickets/:id — single ticket + its status history
+// GET /api/tickets/:id — single ticket + status history + IT notes
 router.get('/:id', requireAuth, async (req, res) => {
   try {
     const ticketRes = await pool.query('SELECT * FROM tickets WHERE id = $1', [req.params.id]);
     if (ticketRes.rows.length === 0) return res.status(404).json({ error: 'ticket not found' });
 
-    const historyRes = await pool.query(
-      'SELECT * FROM ticket_status_history WHERE ticket_id = $1 ORDER BY changed_at ASC',
-      [req.params.id]
-    );
-    res.json({ ...ticketRes.rows[0], history: historyRes.rows });
+    const [historyRes, notesRes] = await Promise.all([
+      pool.query(
+        'SELECT * FROM ticket_status_history WHERE ticket_id = $1 ORDER BY changed_at ASC',
+        [req.params.id]
+      ),
+      pool.query(
+        'SELECT * FROM ticket_notes WHERE ticket_id = $1 ORDER BY created_at ASC',
+        [req.params.id]
+      )
+    ]);
+
+    res.json({
+      ...ticketRes.rows[0],
+      history: historyRes.rows,
+      notes: notesRes.rows
+    });
   } catch (err) {
     console.error(err);
     res.status(500).json({ error: 'failed to fetch ticket' });
@@ -74,6 +85,45 @@ router.post('/', async (req, res) => {
   }
 });
 
+// POST /api/tickets/:id/notes — IT-only internal work note
+router.post('/:id/notes', requireAuth, async (req, res) => {
+  const note = String(req.body.note || '').trim();
+  if (!note) return res.status(400).json({ error: 'note is required' });
+  if (note.length > 5000) return res.status(400).json({ error: 'note is too long' });
+
+  try {
+    const ticket = await pool.query('SELECT id FROM tickets WHERE id = $1', [req.params.id]);
+    if (ticket.rows.length === 0) return res.status(404).json({ error: 'ticket not found' });
+
+    const createdBy = req.user.display_name || req.user.username || 'IT';
+    const { rows } = await pool.query(
+      `INSERT INTO ticket_notes (ticket_id, note, created_by)
+       VALUES ($1, $2, $3)
+       RETURNING *`,
+      [req.params.id, note, createdBy]
+    );
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'failed to add ticket note' });
+  }
+});
+
+// DELETE /api/tickets/:id — permanently delete a ticket (IT-only)
+router.delete('/:id', requireAuth, async (req, res) => {
+  try {
+    const { rows } = await pool.query(
+      'DELETE FROM tickets WHERE id = $1 RETURNING id, ticket_no',
+      [req.params.id]
+    );
+    if (rows.length === 0) return res.status(404).json({ error: 'ticket not found' });
+    res.status(204).end();
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: 'failed to delete ticket' });
+  }
+});
+
 // PATCH /api/tickets/:id/status — move a ticket through the workflow, or cancel/reopen it
 router.patch('/:id/status', requireAuth, async (req, res) => {
   const { status } = req.body;
@@ -98,8 +148,8 @@ router.patch('/:id/status', requireAuth, async (req, res) => {
     }
 
     const { rows } = await pool.query(
-      `UPDATE tickets SET status = $1, prev_status = $2 WHERE id = $3 RETURNING *`,
-      [nextStatus, prevStatus, req.params.id]
+      `UPDATE tickets SET status = $1, prev_status = $2, assigned_to = COALESCE($3, assigned_to) WHERE id = $4 RETURNING *`,
+      [nextStatus, prevStatus, req.user.display_name || req.user.username || null, req.params.id]
     );
     const ticket = rows[0];
     await notifyStatusChange(ticket, old.status);

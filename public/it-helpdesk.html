@@ -440,6 +440,19 @@
     padding:12px 14px;
     border-radius:8px;
   }
+  .note-list{display:flex;flex-direction:column;gap:10px;}
+  .ticket-note{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:11px 12px;}
+  .ticket-note .note-meta{font-size:11px;color:var(--muted);margin-bottom:6px;}
+  .ticket-note .note-body{font-size:13px;line-height:1.55;white-space:pre-wrap;color:var(--ink);}
+  .note-empty{font-size:12.5px;color:var(--muted);padding:8px 0;}
+  .note-form textarea{width:100%;min-height:90px;resize:vertical;font-family:var(--sans);font-size:13px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;}
+  .note-form textarea:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(27,42,107,.12);}
+  .note-actions{display:flex;justify-content:flex-end;margin-top:8px;}
+  .note-btn{font-family:var(--sans);font-size:12.5px;font-weight:700;color:#fff;background:var(--navy);border:0;border-radius:7px;padding:8px 12px;cursor:pointer;}
+  .note-btn:disabled{opacity:.6;cursor:not-allowed;}
+  .delete-ticket-row{margin-top:28px;padding-top:18px;border-top:1px solid var(--border);}
+  .delete-ticket-btn{width:100%;font-family:var(--sans);font-size:12.5px;font-weight:700;color:#fff;background:var(--red);border:0;border-radius:8px;padding:10px 12px;cursor:pointer;}
+  .delete-ticket-btn:hover{background:#d13d24;}
   .stepper{
     display:flex;
     align-items:center;
@@ -776,6 +789,19 @@
     <div class="d-label">รายละเอียดปัญหา</div>
     <div class="d-desc" id="d-desc"></div>
   </div>
+
+  <div class="d-section">
+    <div class="d-label">หมายเหตุ / วิธีแก้ไขโดย IT</div>
+    <div class="note-list" id="ticket-notes"></div>
+    <form class="note-form" onsubmit="addTicketNote(event)">
+      <textarea id="ticket-note-input" placeholder="เช่น ตรวจสอบแล้วพบว่าสาย LAN หลวม เปลี่ยนสายและทดสอบใช้งานได้ปกติ"></textarea>
+      <div class="note-actions"><button type="submit" class="note-btn" id="note-submit-btn">บันทึกหมายเหตุ</button></div>
+    </form>
+  </div>
+
+  <div class="delete-ticket-row">
+    <button class="delete-ticket-btn" onclick="deleteTicket()">🗑 ลบ Ticket นี้ถาวร</button>
+  </div>
 </div>
 
 
@@ -955,7 +981,7 @@ function renderTable(){
   });
 }
 
-function openDrawer(id){
+async function openDrawer(id){
   selectedId = id;
   const t = tickets.find(x => x.id === id);
   if (!t) return;
@@ -963,11 +989,88 @@ function openDrawer(id){
   document.getElementById('d-title').textContent = t.cat;
   document.getElementById('d-meta').textContent = t.name + ' · ' + t.dept + ' · ความเร่งด่วน: ' + urgencyLabel[t.urg];
   document.getElementById('d-desc').textContent = t.detail;
+  document.getElementById('ticket-note-input').value = '';
   updateStepper(t.status);
   updateCancelUI(t);
   document.getElementById('overlay').classList.add('show');
   document.getElementById('drawer').classList.add('show');
   renderTable();
+  await loadTicketNotes(t.dbId);
+}
+
+function formatDateTime(iso){
+  const d = new Date(iso);
+  return d.toLocaleString('th-TH', { dateStyle:'medium', timeStyle:'short' });
+}
+
+async function loadTicketNotes(dbId){
+  const list = document.getElementById('ticket-notes');
+  list.innerHTML = '<div class="note-empty">กำลังโหลดหมายเหตุ…</div>';
+  try {
+    const detail = await apiFetch('/api/tickets/' + dbId);
+    const notes = detail.notes || [];
+    list.innerHTML = '';
+    if (!notes.length) {
+      list.innerHTML = '<div class="note-empty">ยังไม่มีหมายเหตุจาก IT</div>';
+      return;
+    }
+    notes.forEach(n => {
+      const card = document.createElement('div');
+      card.className = 'ticket-note';
+      const meta = document.createElement('div');
+      meta.className = 'note-meta';
+      meta.textContent = (n.created_by || 'IT') + ' · ' + formatDateTime(n.created_at);
+      const body = document.createElement('div');
+      body.className = 'note-body';
+      body.textContent = n.note;
+      card.append(meta, body);
+      list.appendChild(card);
+    });
+  } catch (err) {
+    list.innerHTML = '<div class="note-empty">โหลดหมายเหตุไม่สำเร็จ: ' + err.message + '</div>';
+  }
+}
+
+async function addTicketNote(ev){
+  ev.preventDefault();
+  const t = tickets.find(x => x.id === selectedId);
+  if (!t) return;
+  const input = document.getElementById('ticket-note-input');
+  const note = input.value.trim();
+  if (!note) { alert('กรุณาพิมพ์หมายเหตุก่อนบันทึก'); input.focus(); return; }
+
+  const btn = document.getElementById('note-submit-btn');
+  btn.disabled = true;
+  try {
+    await apiFetch('/api/tickets/' + t.dbId + '/notes', {
+      method: 'POST',
+      headers: { 'Content-Type':'application/json' },
+      body: JSON.stringify({ note })
+    });
+    input.value = '';
+    await loadTicketNotes(t.dbId);
+  } catch (err) {
+    alert('บันทึกหมายเหตุไม่สำเร็จ: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+}
+
+async function deleteTicket(){
+  const t = tickets.find(x => x.id === selectedId);
+  if (!t) return;
+  const ok = confirm('ต้องการลบ ' + t.id + ' ถาวรใช่หรือไม่?\n\nข้อมูล Ticket และหมายเหตุ/ประวัติที่เกี่ยวข้องจะถูกลบและไม่สามารถกู้คืนได้');
+  if (!ok) return;
+
+  try {
+    await apiFetch('/api/tickets/' + t.dbId, { method:'DELETE' });
+    closeDrawer();
+    await loadTickets();
+    renderTable();
+    renderInfo();
+  } catch (err) {
+    alert('ลบ Ticket ไม่สำเร็จ: ' + err.message);
+  }
 }
 
 function updateCancelUI(t){
