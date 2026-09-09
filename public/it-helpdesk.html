@@ -889,9 +889,14 @@ async function submitTicket(ev){
     document.querySelector('input[name="urg"][value="mid"]').checked = true;
 
     spawnToast(ticket.ticket_no, ticket.reporter_name, ticket.department, ticket.category);
-    await loadTickets();
-    renderTable();
-    renderInfo();
+
+    // ผู้แจ้งแบบ Guest ส่ง Ticket ได้โดยไม่ต้อง Login แต่ GET /api/tickets
+    // ถูกป้องกันด้วย Authentication จึงโหลดรายการเฉพาะเมื่อเป็น IT ที่ Login แล้ว
+    if (authToken) {
+      await loadTickets();
+      renderTable();
+      renderInfo();
+    }
   } catch (err) {
     alert('ส่งเรื่องไม่สำเร็จ: ' + err.message);
   } finally {
