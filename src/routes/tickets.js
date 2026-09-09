@@ -1,6 +1,7 @@
 const express = require('express');
 const { pool } = require('../db');
 const { notifyNewTicket, notifyStatusChange } = require('../notifications');
+const { requireAuth } = require('../auth');
 
 const router = express.Router();
 
@@ -8,7 +9,7 @@ const VALID_STATUS = ['new', 'progress', 'done', 'cancel'];
 const VALID_URGENCY = ['low', 'mid', 'high'];
 
 // GET /api/tickets?status=new  — list tickets, newest first
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   const { status } = req.query;
   try {
     const params = [];
@@ -30,7 +31,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET /api/tickets/:id — single ticket + its status history
-router.get('/:id', async (req, res) => {
+router.get('/:id', requireAuth, async (req, res) => {
   try {
     const ticketRes = await pool.query('SELECT * FROM tickets WHERE id = $1', [req.params.id]);
     if (ticketRes.rows.length === 0) return res.status(404).json({ error: 'ticket not found' });
@@ -74,7 +75,7 @@ router.post('/', async (req, res) => {
 });
 
 // PATCH /api/tickets/:id/status — move a ticket through the workflow, or cancel/reopen it
-router.patch('/:id/status', async (req, res) => {
+router.patch('/:id/status', requireAuth, async (req, res) => {
   const { status } = req.body;
   if (!VALID_STATUS.includes(status)) {
     return res.status(400).json({ error: 'invalid status' });

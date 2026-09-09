@@ -1,10 +1,11 @@
 const express = require('express');
 const { pool } = require('../db');
+const { requireAuth } = require('../auth');
 
 const router = express.Router();
 
 // GET /api/overview — counts for the "ภาพรวม" charts (status / category / department)
-router.get('/', async (req, res) => {
+router.get('/', requireAuth, async (req, res) => {
   try {
     const [byStatus, byCategory, byDept, total] = await Promise.all([
       pool.query('SELECT status, COUNT(*)::int AS count FROM tickets GROUP BY status'),

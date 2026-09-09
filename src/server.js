@@ -6,6 +6,7 @@ const cors = require('cors');
 const ticketsRouter = require('./routes/tickets');
 const overviewRouter = require('./routes/overview');
 const pushRouter = require('./routes/push');
+const authRouter = require('./routes/auth');
 
 const app = express();
 
@@ -18,6 +19,7 @@ app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.get('/api/health', (req, res) => res.json({ ok: true }));
+app.use('/api/auth', authRouter);
 app.use('/api/tickets', ticketsRouter);
 app.use('/api/overview', overviewRouter);
 app.use('/api/push', pushRouter);

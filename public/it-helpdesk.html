@@ -98,6 +98,9 @@
     color:#fff;
   }
 
+
+  .login-modal{display:none;position:fixed;inset:0;background:rgba(18,30,82,.45);z-index:200;align-items:center;justify-content:center;padding:20px}.login-modal.show{display:flex}.login-card{position:relative;width:min(420px,100%);background:#fff;border-radius:14px;padding:28px;box-shadow:0 20px 50px rgba(0,0,0,.2)}.login-card h2{margin:0 0 8px;color:var(--navy-deep)}.login-card p{margin:0 0 20px;color:var(--muted);font-size:13px}.login-card label{display:block;font-size:13px;font-weight:600;margin:12px 0}.login-card input{width:100%;margin-top:6px;padding:11px;border:1px solid var(--border);border-radius:8px;font:inherit}.login-card .submit-btn{width:100%;margin-top:8px}.login-close{position:absolute;right:14px;top:10px;border:0;background:transparent;font-size:28px;cursor:pointer}.login-error{min-height:18px;color:var(--red);font-size:12px;margin-top:4px}
+
   /* ---------- Layout ---------- */
   .view{ display:none; }
   .view.active{ display:block; }
@@ -605,6 +608,8 @@
       <button id="tab-submit" class="active" onclick="showView('submit')">แจ้งปัญหา</button>
       <button id="tab-dash" onclick="showView('dash')">สำหรับ IT</button>
       <button id="tab-info" onclick="showView('info')">ภาพรวม</button>
+      <button id="login-btn" onclick="openLogin()">Log in</button>
+      <button id="logout-btn" onclick="logout()" style="display:none">Log out</button>
     </div>
   </div>
 </header>
@@ -774,10 +779,13 @@
 </div>
 
 
+<div id="login-modal" class="login-modal"><div class="login-card"><button class="login-close" onclick="closeLogin()">×</button><h2>เข้าสู่ระบบสำหรับ IT</h2><p>กรุณาเข้าสู่ระบบเพื่อดูหน้า สำหรับ IT และ ภาพรวม</p><form onsubmit="login(event)"><label>Username<input id="login-username" autocomplete="username" required></label><label>Password<input id="login-password" type="password" autocomplete="current-password" required></label><div id="login-error" class="login-error"></div><button type="submit" class="submit-btn">Log in</button></form></div></div>
+
 <script>
 let selectedId = null;      // ticket_no of the ticket open in the drawer (e.g. "IT-1043")
 let currentFilter = 'all';
 let tickets = [];           // populated from /api/tickets — see loadTickets()
+let authToken = localStorage.getItem("ssa_it_token") || null;
 
 const urgencyLabel = { low: 'ไม่เร่งด่วน', mid: 'ปานกลาง', high: 'เร่งด่วนมาก' };
 const statusLabel = { new: 'รอดำเนินการ', progress: 'กำลังแก้ไข', done: 'เสร็จสิ้น', cancel: 'ยกเลิก' };
@@ -805,7 +813,9 @@ function normalizeTicket(t){
   };
 }
 
-async function apiFetch(path, options){
+async function apiFetch(path, options = {}){
+  options.headers = { ...(options.headers || {}) };
+  if (authToken) options.headers.Authorization = "Bearer " + authToken;
   const res = await fetch(path, options);
   if (!res.ok) {
     let message = 'เกิดข้อผิดพลาด (' + res.status + ')';
@@ -829,6 +839,7 @@ async function loadTickets(){
 }
 
 function showView(name){
+  if ((name === 'dash' || name === 'info') && !authToken) { openLogin(); return; }
   document.getElementById('view-submit').classList.toggle('active', name === 'submit');
   document.getElementById('view-dash').classList.toggle('active', name === 'dash');
   document.getElementById('view-info').classList.toggle('active', name === 'info');
@@ -838,6 +849,13 @@ function showView(name){
   if (name === 'dash') loadTickets().then(renderTable);
   if (name === 'info') loadTickets().then(renderInfo);
 }
+
+
+function openLogin(){document.getElementById('login-modal').classList.add('show');setTimeout(()=>document.getElementById('login-username').focus(),0)}
+function closeLogin(){document.getElementById('login-modal').classList.remove('show')}
+function updateAuthUI(){document.getElementById('login-btn').style.display=authToken?'none':'';document.getElementById('logout-btn').style.display=authToken?'':'none'}
+async function login(ev){ev.preventDefault();const username=document.getElementById('login-username').value.trim(),password=document.getElementById('login-password').value,err=document.getElementById('login-error');err.textContent='';try{const r=await fetch('/api/auth/login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});const b=await r.json();if(!r.ok)throw new Error(b.error||'เข้าสู่ระบบไม่สำเร็จ');authToken=b.token;localStorage.setItem('ssa_it_token',authToken);closeLogin();updateAuthUI();showView('dash')}catch(e){err.textContent=e.message}}
+function logout(){authToken=null;localStorage.removeItem('ssa_it_token');updateAuthUI();showView('submit')}
 
 document.getElementById('urgency-group').addEventListener('change', (e) => {
   document.querySelectorAll('.urgency-group label').forEach(l => l.classList.remove('checked'));
@@ -1072,7 +1090,8 @@ function renderInfo(){
   `).join('');
 }
 
-loadTickets().then(() => {
+updateAuthUI();
+if (authToken) loadTickets().then(() => {
   renderTable();
   renderInfo();
 });
