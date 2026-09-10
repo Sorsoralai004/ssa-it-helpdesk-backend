@@ -6,6 +6,7 @@
 
 const { sendPushToAll } = require('./push');
 const { sendEmail } = require('./email');
+const { sendLineToIT } = require('./line');
 
 async function notifyNewTicket(ticket) {
   console.log(`[notify] new ticket ${ticket.ticket_no} — ${ticket.category} (${ticket.urgency})`);
@@ -13,24 +14,43 @@ async function notifyNewTicket(ticket) {
   const title = `แจ้งปัญหาใหม่ ${ticket.ticket_no}`;
   const body = `${ticket.category} · ความเร่งด่วน: ${ticket.urgency} · ${ticket.department}`;
 
-  await sendPushToAll({
-    title,
-    body,
-    url: `/it-helpdesk.html#${ticket.id}`,
-  });
+  const lineText = [
+    `🚨 ${title}`,
+    `ผู้แจ้ง: ${ticket.reporter_name}`,
+    `แผนก/สถานที่: ${ticket.department}`,
+    `หมวดหมู่: ${ticket.category}`,
+    `ความเร่งด่วน: ${ticket.urgency}`,
+    '',
+    `รายละเอียด: ${ticket.detail}`,
+  ].join('\n');
 
-  await sendEmail(
-    `[IT Helpdesk] ${title}`,
-    [
-      `ผู้แจ้ง: ${ticket.reporter_name}`,
-      `แผนก/สถานที่: ${ticket.department}`,
-      `หมวดหมู่: ${ticket.category}`,
-      `ความเร่งด่วน: ${ticket.urgency}`,
-      '',
-      'รายละเอียด:',
-      ticket.detail,
-    ].join('\n')
-  );
+  const results = await Promise.allSettled([
+    sendPushToAll({
+      title,
+      body,
+      url: `/it-helpdesk.html#${ticket.id}`,
+    }),
+    sendEmail(
+      `[IT Helpdesk] ${title}`,
+      [
+        `ผู้แจ้ง: ${ticket.reporter_name}`,
+        `แผนก/สถานที่: ${ticket.department}`,
+        `หมวดหมู่: ${ticket.category}`,
+        `ความเร่งด่วน: ${ticket.urgency}`,
+        '',
+        'รายละเอียด:',
+        ticket.detail,
+      ].join('\n')
+    ),
+    sendLineToIT(lineText),
+  ]);
+
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      const channels = ['push', 'email', 'line'];
+      console.error(`[notify] ${channels[index]} failed for ${ticket.ticket_no}:`, result.reason);
+    }
+  });
 }
 
 async function notifyStatusChange(ticket, oldStatus) {
@@ -39,16 +59,31 @@ async function notifyStatusChange(ticket, oldStatus) {
   const title = `${ticket.ticket_no} เปลี่ยนสถานะ`;
   const body = `${oldStatus} → ${ticket.status}`;
 
-  await sendPushToAll({
-    title,
-    body,
-    url: `/it-helpdesk.html#${ticket.id}`,
-  });
+  const lineText = [
+    `🔔 ${title}`,
+    `สถานะเดิม: ${oldStatus}`,
+    `สถานะใหม่: ${ticket.status}`,
+  ].join('\n');
 
-  await sendEmail(
-    `[IT Helpdesk] ${title}`,
-    `Ticket: ${ticket.ticket_no}\nสถานะเดิม: ${oldStatus}\nสถานะใหม่: ${ticket.status}`
-  );
+  const results = await Promise.allSettled([
+    sendPushToAll({
+      title,
+      body,
+      url: `/it-helpdesk.html#${ticket.id}`,
+    }),
+    sendEmail(
+      `[IT Helpdesk] ${title}`,
+      `Ticket: ${ticket.ticket_no}\nสถานะเดิม: ${oldStatus}\nสถานะใหม่: ${ticket.status}`
+    ),
+    sendLineToIT(lineText),
+  ]);
+
+  results.forEach((result, index) => {
+    if (result.status === 'rejected') {
+      const channels = ['push', 'email', 'line'];
+      console.error(`[notify] ${channels[index]} failed for ${ticket.ticket_no}:`, result.reason);
+    }
+  });
 }
 
 module.exports = { notifyNewTicket, notifyStatusChange };
