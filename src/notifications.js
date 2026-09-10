@@ -75,12 +75,11 @@ async function notifyStatusChange(ticket, oldStatus) {
       `[IT Helpdesk] ${title}`,
       `Ticket: ${ticket.ticket_no}\nสถานะเดิม: ${oldStatus}\nสถานะใหม่: ${ticket.status}`
     ),
-    sendLineToIT(lineText),
   ]);
 
   results.forEach((result, index) => {
     if (result.status === 'rejected') {
-      const channels = ['push', 'email', 'line'];
+      const channels = ['push', 'email'];
       console.error(`[notify] ${channels[index]} failed for ${ticket.ticket_no}:`, result.reason);
     }
   });
